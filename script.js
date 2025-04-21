@@ -152,7 +152,7 @@ async function startGame() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { ideal: 'user' }, // ✅ 改為使用自拍鏡頭
+          facingMode: { exact: 'environment' }, // ✅ 改為使用自拍鏡頭
           width: { ideal: 640 },
           height: { ideal: 480 }
         },
