@@ -2,26 +2,23 @@ const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
 const poseImage = document.getElementById('poseImage');
 
 let detector, rafId;
 let currentPoseIndex = 0;
 const totalPoses = 7;
-const similarityThreshold = 0.89;
 let standardKeypointsList = [];
 let poseOrder = [];
 
-// 隨機打亂 1~8
 function shufflePoseOrder() {
   poseOrder = Array.from({ length: totalPoses }, (_, i) => i + 1);
   for (let i = poseOrder.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [poseOrder[i], poseOrder[j]] = [poseOrder[j], poseOrder[i]];
   }
-  console.log("本次順序：", poseOrder);
 }
 
-// 嘗試載入 png 或 PNG
 function resolvePoseImageName(base) {
   const png = `poses/${base}.png`;
   const PNG = `poses/${base}.PNG`;
@@ -33,8 +30,8 @@ function resolvePoseImageName(base) {
   });
 }
 
-// 載入所有 pose JSON 和配圖
 async function loadStandardKeypoints() {
+  standardKeypointsList = [];
   for (const i of poseOrder) {
     const res = await fetch(`poses/pose${i}.json`);
     const json = await res.json();
@@ -47,7 +44,49 @@ async function loadStandardKeypoints() {
   }
 }
 
-// 畫骨架
+function computeAngle(a, b, c) {
+  const ab = { x: b.x - a.x, y: b.y - a.y };
+  const cb = { x: b.x - c.x, y: b.y - c.y };
+  const dot = ab.x * cb.x + ab.y * cb.y;
+  const abLen = Math.hypot(ab.x, ab.y);
+  const cbLen = Math.hypot(cb.x, cb.y);
+  const angleRad = Math.acos(dot / (abLen * cbLen));
+  return angleRad * (180 / Math.PI);
+}
+
+function compareKeypointsAngleBased(user, standard) {
+  const angles = [
+    ["left_shoulder", "left_elbow", "left_wrist"],
+    ["right_shoulder", "right_elbow", "right_wrist"],
+    ["left_hip", "left_knee", "left_ankle"],
+    ["right_hip", "right_knee", "right_ankle"],
+    ["left_elbow", "left_shoulder", "left_hip"],
+    ["right_elbow", "right_shoulder", "right_hip"]
+  ];
+
+  let totalDiff = 0, count = 0;
+
+  for (const [aName, bName, cName] of angles) {
+    const aUser = user.find(kp => kp.name === aName);
+    const bUser = user.find(kp => kp.name === bName);
+    const cUser = user.find(kp => kp.name === cName);
+    const aStd = standard.find(kp => kp.name === aName);
+    const bStd = standard.find(kp => kp.name === bName);
+    const cStd = standard.find(kp => kp.name === cName);
+
+    if ([aUser, bUser, cUser, aStd, bStd, cStd].every(kp => kp?.score > 0.5)) {
+      const angleUser = computeAngle(aUser, bUser, cUser);
+      const angleStd = computeAngle(aStd, bStd, cStd);
+      totalDiff += Math.abs(angleUser - angleStd);
+      count++;
+    }
+  }
+
+  if (count === 0) return 0;
+  const avgDiff = totalDiff / count;
+  return avgDiff < 10 ? 1 : 0;
+}
+
 function drawKeypoints(kps, color, radius, alpha) {
   ctx.globalAlpha = alpha;
   ctx.fillStyle = color;
@@ -61,22 +100,6 @@ function drawKeypoints(kps, color, radius, alpha) {
   ctx.globalAlpha = 1.0;
 }
 
-// 計算相似度
-function compareKeypoints(a, b) {
-  let sum = 0, count = 0;
-  for (let i = 0; i < a.length && i < b.length; i++) {
-    if (a[i].score > 0.4 && b[i].score > 0.4) {
-      const dx = a[i].x - b[i].x;
-      const dy = a[i].y - b[i].y;
-      sum += Math.hypot(dx, dy);
-      count++;
-    }
-  }
-  if (!count) return 0;
-  return 1 / (1 + (sum / count) / 100);
-}
-
-// 主偵測流程
 async function detect() {
   const result = await detector.estimatePoses(video);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -89,15 +112,15 @@ async function detect() {
     const user = result[0].keypoints;
     drawKeypoints(user, 'red', 6, 1.0);
 
-    const sim = compareKeypoints(user, currentPose.keypoints);
-    if (sim > similarityThreshold) {
+    const sim = compareKeypointsAngleBased(user, currentPose.keypoints);
+    if (sim === 1) {
       currentPoseIndex++;
       if (currentPoseIndex < totalPoses) {
         poseImage.src = standardKeypointsList[currentPoseIndex].imagePath;
       } else {
         cancelAnimationFrame(rafId);
-        alert('🎉 全部完成！');
-        return;
+        poseImage.src = "";
+        restartBtn.style.display = "block";
       }
     }
   }
@@ -105,36 +128,37 @@ async function detect() {
   rafId = requestAnimationFrame(detect);
 }
 
-// 啟動流程
 async function startGame() {
-  startBtn.disabled = true;
   startBtn.style.display = 'none';
+  restartBtn.style.display = 'none';
+  currentPoseIndex = 0;
 
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: { exact: 'environment' }, // ✅ 使用主鏡頭
-      width: { ideal: 640 },
-      height: { ideal: 480 }
-    },
-    audio: false
-  });
-  video.srcObject = stream;
-  await video.play();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'user' },
+        width: { ideal: 640 },
+        height: { ideal: 480 }
+      },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+  } catch (err) {
+    alert("⚠️ 無法開啟攝影機：" + err.message);
+    return;
+  }
 
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-
-  // ✅ 鏡像翻轉處理
   ctx.setTransform(-1, 0, 0, 1, canvas.width, 0);
 
   try {
-    await tf.setBackend('webgl'); await tf.ready();
+    await tf.setBackend('webgl');
+    await tf.ready();
   } catch {
-    try {
-      await tf.setBackend('wasm'); await tf.ready();
-    } catch {
-      await tf.setBackend('cpu'); await tf.ready();
-    }
+    await tf.setBackend('wasm');
+    await tf.ready();
   }
 
   detector = await poseDetection.createDetector(
@@ -149,16 +173,16 @@ async function startGame() {
 }
 
 startBtn.addEventListener("click", startGame);
+restartBtn.addEventListener("click", startGame);
 
-// ✅ 點一下畫面也能跳下一動作
 document.body.addEventListener('click', () => {
   if (!standardKeypointsList.length) return;
-
   currentPoseIndex++;
   if (currentPoseIndex < totalPoses) {
     poseImage.src = standardKeypointsList[currentPoseIndex].imagePath;
   } else {
     cancelAnimationFrame(rafId);
-    alert('🎉 全部完成！');
+    poseImage.src = "";
+    restartBtn.style.display = "block";
   }
 });
