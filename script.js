@@ -4,12 +4,15 @@ const ctx = canvas.getContext('2d');
 const startBtn = document.getElementById('startBtn');
 const restartBtn = document.getElementById('restartBtn');
 const poseImage = document.getElementById('poseImage');
+const progressBar = document.getElementById('progressBar');
 
 let detector, rafId;
 let currentPoseIndex = 0;
 const totalPoses = 7;
 let standardKeypointsList = [];
 let poseOrder = [];
+let holdStartTime = null;
+const holdDuration = 3000;
 
 // 隨機打亂順序
 function shufflePoseOrder() {
@@ -89,10 +92,10 @@ function compareKeypointsAngleBased(user, standard) {
 
   if (!count) return 0;
   const avgDiff = totalDiff / count;
-  return avgDiff < 10 ? 1 : 0; // 判定通過門檻（越小越嚴格）
+  return avgDiff < 10 ? 1 : 0;
 }
 
-// 畫紅點或藍點
+// 畫點
 function drawKeypoints(kps, color, radius, alpha) {
   ctx.globalAlpha = alpha;
   ctx.fillStyle = color;
@@ -106,7 +109,7 @@ function drawKeypoints(kps, color, radius, alpha) {
   ctx.globalAlpha = 1.0;
 }
 
-// 偵測流程
+// 偵測
 async function detect() {
   const result = await detector.estimatePoses(video);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -120,27 +123,43 @@ async function detect() {
     drawKeypoints(user, 'red', 6, 1.0);
 
     const sim = compareKeypointsAngleBased(user, currentPose.keypoints);
+    const now = performance.now();
+
     if (sim === 1) {
-      currentPoseIndex++;
-      if (currentPoseIndex < totalPoses) {
-        poseImage.src = standardKeypointsList[currentPoseIndex].imagePath;
-      } else {
-        cancelAnimationFrame(rafId);
-        poseImage.src = "";
-        restartBtn.style.display = "block";
+      if (!holdStartTime) holdStartTime = now;
+      const heldTime = now - holdStartTime;
+      const progressPercent = Math.min(100, (heldTime / holdDuration) * 100);
+      progressBar.style.width = `${progressPercent}%`;
+
+      if (heldTime >= holdDuration) {
+        holdStartTime = null;
+        progressBar.style.width = "0%";
+        currentPoseIndex++;
+        if (currentPoseIndex < totalPoses) {
+          poseImage.src = standardKeypointsList[currentPoseIndex].imagePath;
+        } else {
+          cancelAnimationFrame(rafId);
+          poseImage.src = "";
+          restartBtn.style.display = "block";
+        }
       }
+    } else {
+      holdStartTime = null;
+      progressBar.style.width = "0%";
     }
   }
 
   rafId = requestAnimationFrame(detect);
 }
 
-// 啟動遊戲主流程（修復重啟問題）
+// 開始流程
 async function startGame() {
   cancelAnimationFrame(rafId);
   poseImage.src = "";
+  progressBar.style.width = "0%";
   standardKeypointsList = [];
   currentPoseIndex = 0;
+  holdStartTime = null;
   startBtn.style.display = 'none';
   restartBtn.style.display = 'none';
 
@@ -151,7 +170,7 @@ async function startGame() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
-        facingMode: { exact: 'environment' },
+        facingMode: { ideal: 'user' },
         width: { ideal: 640 },
         height: { ideal: 480 }
       },
@@ -166,7 +185,7 @@ async function startGame() {
 
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  ctx.setTransform(-1, 0, 0, 1, canvas.width, 0); // 鏡像
+  ctx.setTransform(-1, 0, 0, 1, canvas.width, 0);
 
   try {
     await tf.setBackend('webgl');
@@ -183,7 +202,6 @@ async function startGame() {
 
   shufflePoseOrder();
   await loadStandardKeypoints();
-
   poseImage.src = standardKeypointsList[0].imagePath;
   detect();
 }
@@ -191,9 +209,11 @@ async function startGame() {
 startBtn.addEventListener("click", startGame);
 restartBtn.addEventListener("click", startGame);
 
-// 點畫面也能跳下一關
+// 點擊畫面手動跳下一關
 document.body.addEventListener('click', () => {
   if (!standardKeypointsList.length) return;
+  holdStartTime = null;
+  progressBar.style.width = "0%";
   currentPoseIndex++;
   if (currentPoseIndex < totalPoses) {
     poseImage.src = standardKeypointsList[currentPoseIndex].imagePath;
