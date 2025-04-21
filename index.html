@@ -36,9 +36,7 @@
       border-radius: 12px;
     }
 
-    #restartBtn {
-      display: none;
-    }
+    #restartBtn { display: none; }
 
     #poseImage {
       position: absolute;
@@ -51,9 +49,29 @@
       z-index: 5;
       background: rgba(0, 0, 0, 0.2);
     }
+
+    #progressBarContainer {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 150px;
+      height: 5px;
+      background: white;
+      border-radius: 3px;
+      z-index: 10;
+      overflow: hidden;
+    }
+
+    #progressBar {
+      height: 100%;
+      width: 0%;
+      background: limegreen;
+      transition: width 0.1s linear;
+    }
   </style>
 
-  <!-- TensorFlow -->
+  <!-- TensorFlow 與姿勢模型 -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
 </head>
@@ -61,6 +79,7 @@
   <button id="startBtn">開始遊戲</button>
   <button id="restartBtn">重新開始</button>
   <img id="poseImage" src="" alt="Pose" />
+  <div id="progressBarContainer"><div id="progressBar"></div></div>
   <video id="video" autoplay playsinline muted></video>
   <canvas id="canvas"></canvas>
 
