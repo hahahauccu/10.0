@@ -155,8 +155,8 @@ async function startGame() {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { exact: 'environment' },
-        width: { ideal: 960, min: 640, max: 1280 },
-        height: { ideal: 720, min: 480, max: 960 }
+        width: { ideal: 640 },
+        height: { ideal: 480 }
       },
       audio: false
     });
@@ -194,6 +194,7 @@ async function startGame() {
 startBtn.addEventListener("click", startGame);
 restartBtn.addEventListener("click", startGame);
 
+// 點畫面也能跳下一關
 document.body.addEventListener('click', () => {
   if (!standardKeypointsList.length || !isPlaying) return;
   currentPoseIndex++;
@@ -204,12 +205,5 @@ document.body.addEventListener('click', () => {
     poseImage.src = "";
     restartBtn.style.display = "block";
     isPlaying = false;
-  }
-});
-
-// ✅ 如果從背景回來，重新啟動遊戲流程
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && isPlaying) {
-    startGame();
   }
 });
