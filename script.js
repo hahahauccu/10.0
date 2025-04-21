@@ -11,6 +11,7 @@ const totalPoses = 7;
 let standardKeypointsList = [];
 let poseOrder = [];
 
+// 隨機打亂順序
 function shufflePoseOrder() {
   poseOrder = Array.from({ length: totalPoses }, (_, i) => i + 1);
   for (let i = poseOrder.length - 1; i > 0; i--) {
@@ -19,6 +20,7 @@ function shufflePoseOrder() {
   }
 }
 
+// 支援 PNG or png
 function resolvePoseImageName(base) {
   const png = `poses/${base}.png`;
   const PNG = `poses/${base}.PNG`;
@@ -30,6 +32,7 @@ function resolvePoseImageName(base) {
   });
 }
 
+// 載入 JSON 與對應圖
 async function loadStandardKeypoints() {
   standardKeypointsList = [];
   for (const i of poseOrder) {
@@ -44,6 +47,7 @@ async function loadStandardKeypoints() {
   }
 }
 
+// 計算夾角
 function computeAngle(a, b, c) {
   const ab = { x: b.x - a.x, y: b.y - a.y };
   const cb = { x: b.x - c.x, y: b.y - c.y };
@@ -54,6 +58,7 @@ function computeAngle(a, b, c) {
   return angleRad * (180 / Math.PI);
 }
 
+// 使用角度比對
 function compareKeypointsAngleBased(user, standard) {
   const angles = [
     ["left_shoulder", "left_elbow", "left_wrist"],
@@ -66,27 +71,28 @@ function compareKeypointsAngleBased(user, standard) {
 
   let totalDiff = 0, count = 0;
 
-  for (const [aName, bName, cName] of angles) {
-    const aUser = user.find(kp => kp.name === aName);
-    const bUser = user.find(kp => kp.name === bName);
-    const cUser = user.find(kp => kp.name === cName);
-    const aStd = standard.find(kp => kp.name === aName);
-    const bStd = standard.find(kp => kp.name === bName);
-    const cStd = standard.find(kp => kp.name === cName);
+  for (const [a, b, c] of angles) {
+    const aU = user.find(kp => kp.name === a);
+    const bU = user.find(kp => kp.name === b);
+    const cU = user.find(kp => kp.name === c);
+    const aS = standard.find(kp => kp.name === a);
+    const bS = standard.find(kp => kp.name === b);
+    const cS = standard.find(kp => kp.name === c);
 
-    if ([aUser, bUser, cUser, aStd, bStd, cStd].every(kp => kp?.score > 0.5)) {
-      const angleUser = computeAngle(aUser, bUser, cUser);
-      const angleStd = computeAngle(aStd, bStd, cStd);
+    if ([aU, bU, cU, aS, bS, cS].every(kp => kp?.score > 0.5)) {
+      const angleUser = computeAngle(aU, bU, cU);
+      const angleStd = computeAngle(aS, bS, cS);
       totalDiff += Math.abs(angleUser - angleStd);
       count++;
     }
   }
 
-  if (count === 0) return 0;
+  if (!count) return 0;
   const avgDiff = totalDiff / count;
-  return avgDiff < 10 ? 1 : 0;
+  return avgDiff < 10 ? 1 : 0; // 判定通過門檻（越小越嚴格）
 }
 
+// 畫紅點或藍點
 function drawKeypoints(kps, color, radius, alpha) {
   ctx.globalAlpha = alpha;
   ctx.fillStyle = color;
@@ -100,6 +106,7 @@ function drawKeypoints(kps, color, radius, alpha) {
   ctx.globalAlpha = 1.0;
 }
 
+// 偵測流程
 async function detect() {
   const result = await detector.estimatePoses(video);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -128,10 +135,18 @@ async function detect() {
   rafId = requestAnimationFrame(detect);
 }
 
+// 啟動遊戲主流程（修復重啟問題）
 async function startGame() {
+  cancelAnimationFrame(rafId);
+  poseImage.src = "";
+  standardKeypointsList = [];
+  currentPoseIndex = 0;
   startBtn.style.display = 'none';
   restartBtn.style.display = 'none';
-  currentPoseIndex = 0;
+
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(track => track.stop());
+  }
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -151,7 +166,7 @@ async function startGame() {
 
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  ctx.setTransform(-1, 0, 0, 1, canvas.width, 0);
+  ctx.setTransform(-1, 0, 0, 1, canvas.width, 0); // 鏡像
 
   try {
     await tf.setBackend('webgl');
@@ -168,6 +183,7 @@ async function startGame() {
 
   shufflePoseOrder();
   await loadStandardKeypoints();
+
   poseImage.src = standardKeypointsList[0].imagePath;
   detect();
 }
@@ -175,6 +191,7 @@ async function startGame() {
 startBtn.addEventListener("click", startGame);
 restartBtn.addEventListener("click", startGame);
 
+// 點畫面也能跳下一關
 document.body.addEventListener('click', () => {
   if (!standardKeypointsList.length) return;
   currentPoseIndex++;
