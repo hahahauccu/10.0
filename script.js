@@ -147,46 +147,6 @@ async function startGame() {
   restartBtn.style.display = 'none';
   isPlaying = true;
 
-  if (video.srcObject) {
-    video.srcObject.getTracks().forEach(track => track.stop());
-  }
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { exact: 'environment' },
-        width: { ideal: 640 },
-        height: { ideal: 480 }
-      },
-      audio: false
-    });
-    video.srcObject = stream;
-    await video.play();
-  } catch (err) {
-    alert("⚠️ 無法開啟攝影機：" + err.message);
-    return;
-  }
-
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  ctx.setTransform(-1, 0, 0, 1, canvas.width, 0); // 鏡像
-
-  try {
-    await tf.setBackend('webgl');
-    await tf.ready();
-  } catch {
-    await tf.setBackend('wasm');
-    await tf.ready();
-  }
-
-  detector = await poseDetection.createDetector(
-    poseDetection.SupportedModels.MoveNet,
-    { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
-  );
-
-  shufflePoseOrder();
-  await loadStandardKeypoints();
-
   poseImage.src = standardKeypointsList[0].imagePath;
   detect();
 }
