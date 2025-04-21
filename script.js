@@ -2,19 +2,20 @@ const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const startBtn = document.getElementById('startBtn');
-const restartBtn = document.getElementById('restartBtn');
 const poseImage = document.getElementById('poseImage');
 const progressBar = document.getElementById('progressBar');
+const restartBtn = document.getElementById('restartBtn');
 
 let detector, rafId;
 let currentPoseIndex = 0;
 const totalPoses = 7;
 let standardKeypointsList = [];
 let poseOrder = [];
+
 let holdStartTime = null;
 const holdDuration = 3000;
 
-// 隨機打亂順序
+// ✅ 隨機順序
 function shufflePoseOrder() {
   poseOrder = Array.from({ length: totalPoses }, (_, i) => i + 1);
   for (let i = poseOrder.length - 1; i > 0; i--) {
@@ -23,7 +24,7 @@ function shufflePoseOrder() {
   }
 }
 
-// 支援 PNG or png
+// ✅ 嘗試載入 png 或 PNG
 function resolvePoseImageName(base) {
   const png = `poses/${base}.png`;
   const PNG = `poses/${base}.PNG`;
@@ -35,7 +36,7 @@ function resolvePoseImageName(base) {
   });
 }
 
-// 載入 JSON 與對應圖
+// ✅ 載入所有 JSON 和圖
 async function loadStandardKeypoints() {
   standardKeypointsList = [];
   for (const i of poseOrder) {
@@ -50,52 +51,7 @@ async function loadStandardKeypoints() {
   }
 }
 
-// 計算夾角
-function computeAngle(a, b, c) {
-  const ab = { x: b.x - a.x, y: b.y - a.y };
-  const cb = { x: b.x - c.x, y: b.y - c.y };
-  const dot = ab.x * cb.x + ab.y * cb.y;
-  const abLen = Math.hypot(ab.x, ab.y);
-  const cbLen = Math.hypot(cb.x, cb.y);
-  const angleRad = Math.acos(dot / (abLen * cbLen));
-  return angleRad * (180 / Math.PI);
-}
-
-// 使用角度比對
-function compareKeypointsAngleBased(user, standard) {
-  const angles = [
-    ["left_shoulder", "left_elbow", "left_wrist"],
-    ["right_shoulder", "right_elbow", "right_wrist"],
-    ["left_hip", "left_knee", "left_ankle"],
-    ["right_hip", "right_knee", "right_ankle"],
-    ["left_elbow", "left_shoulder", "left_hip"],
-    ["right_elbow", "right_shoulder", "right_hip"]
-  ];
-
-  let totalDiff = 0, count = 0;
-
-  for (const [a, b, c] of angles) {
-    const aU = user.find(kp => kp.name === a);
-    const bU = user.find(kp => kp.name === b);
-    const cU = user.find(kp => kp.name === c);
-    const aS = standard.find(kp => kp.name === a);
-    const bS = standard.find(kp => kp.name === b);
-    const cS = standard.find(kp => kp.name === c);
-
-    if ([aU, bU, cU, aS, bS, cS].every(kp => kp?.score > 0.5)) {
-      const angleUser = computeAngle(aU, bU, cU);
-      const angleStd = computeAngle(aS, bS, cS);
-      totalDiff += Math.abs(angleUser - angleStd);
-      count++;
-    }
-  }
-
-  if (!count) return 0;
-  const avgDiff = totalDiff / count;
-  return avgDiff < 45 ? 1 : 0;
-}
-
-// 畫點
+// ✅ 畫出骨架
 function drawKeypoints(kps, color, radius, alpha) {
   ctx.globalAlpha = alpha;
   ctx.fillStyle = color;
@@ -109,7 +65,47 @@ function drawKeypoints(kps, color, radius, alpha) {
   ctx.globalAlpha = 1.0;
 }
 
-// 偵測
+// ✅ 計算關節角度
+function getAngle(a, b, c) {
+  const ab = { x: a.x - b.x, y: a.y - b.y };
+  const cb = { x: c.x - b.x, y: c.y - b.y };
+  const dot = ab.x * cb.x + ab.y * cb.y;
+  const magAB = Math.hypot(ab.x, ab.y);
+  const magCB = Math.hypot(cb.x, cb.y);
+  if (magAB * magCB === 0) return 180;
+  const cos = dot / (magAB * magCB);
+  return Math.acos(Math.max(-1, Math.min(1, cos))) * (180 / Math.PI);
+}
+
+// ✅ 角度比對
+function compareKeypointsAngleBased(a, b) {
+  const joints = [
+    ["left_shoulder", "left_elbow", "left_wrist"],
+    ["right_shoulder", "right_elbow", "right_wrist"],
+    ["left_hip", "left_knee", "left_ankle"],
+    ["right_hip", "right_knee", "right_ankle"],
+    ["left_elbow", "left_shoulder", "left_hip"],
+    ["right_elbow", "right_shoulder", "right_hip"]
+  ];
+
+  let totalDiff = 0, count = 0;
+  for (const [p1, p2, p3] of joints) {
+    const kpA = [a.find(p => p.name === p1), a.find(p => p.name === p2), a.find(p => p.name === p3)];
+    const kpB = [b.find(p => p.name === p1), b.find(p => p.name === p2), b.find(p => p.name === p3)];
+    if (kpA.every(p => p && p.score > 0.4) && kpB.every(p => p && p.score > 0.4)) {
+      const angleA = getAngle(kpA[0], kpA[1], kpA[2]);
+      const angleB = getAngle(kpB[0], kpB[1], kpB[2]);
+      totalDiff += Math.abs(angleA - angleB);
+      count++;
+    }
+  }
+
+  if (!count) return 0;
+  const avgDiff = totalDiff / count;
+  return avgDiff < 45 ? 1 : 0; // ✅ 判定標準（越小越嚴格）
+}
+
+// ✅ 偵測流程
 async function detect() {
   const result = await detector.estimatePoses(video);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -152,47 +148,39 @@ async function detect() {
   rafId = requestAnimationFrame(detect);
 }
 
-// 開始流程
+// ✅ 啟動
 async function startGame() {
-  cancelAnimationFrame(rafId);
-  poseImage.src = "";
-  progressBar.style.width = "0%";
-  standardKeypointsList = [];
-  currentPoseIndex = 0;
-  holdStartTime = null;
+  startBtn.disabled = true;
   startBtn.style.display = 'none';
   restartBtn.style.display = 'none';
 
-  if (video.srcObject) {
-    video.srcObject.getTracks().forEach(track => track.stop());
-  }
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'user' },
-        width: { ideal: 640 },
-        height: { ideal: 480 }
-      },
-      audio: false
-    });
-    video.srcObject = stream;
-    await video.play();
-  } catch (err) {
-    alert("⚠️ 無法開啟攝影機：" + err.message);
-    return;
-  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: { exact: 'environment' },
+      width: { ideal: 640 },
+      height: { ideal: 480 }
+    },
+    audio: false
+  });
+  video.srcObject = stream;
+  await video.play();
 
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  ctx.setTransform(-1, 0, 0, 1, canvas.width, 0);
+  ctx.setTransform(-1, 0, 0, 1, canvas.width, 0); // ✅ 鏡像
 
+  // ✅ WebGL → WASM → CPU fallback
   try {
     await tf.setBackend('webgl');
     await tf.ready();
   } catch {
-    await tf.setBackend('wasm');
-    await tf.ready();
+    try {
+      await tf.setBackend('wasm');
+      await tf.ready();
+    } catch {
+      await tf.setBackend('cpu');
+      await tf.ready();
+    }
   }
 
   detector = await poseDetection.createDetector(
@@ -202,6 +190,7 @@ async function startGame() {
 
   shufflePoseOrder();
   await loadStandardKeypoints();
+  currentPoseIndex = 0;
   poseImage.src = standardKeypointsList[0].imagePath;
   detect();
 }
@@ -209,12 +198,12 @@ async function startGame() {
 startBtn.addEventListener("click", startGame);
 restartBtn.addEventListener("click", startGame);
 
-// 點擊畫面手動跳下一關
+// ✅ 點一下畫面也能跳下一動作
 document.body.addEventListener('click', () => {
   if (!standardKeypointsList.length) return;
+  currentPoseIndex++;
   holdStartTime = null;
   progressBar.style.width = "0%";
-  currentPoseIndex++;
   if (currentPoseIndex < totalPoses) {
     poseImage.src = standardKeypointsList[currentPoseIndex].imagePath;
   } else {
