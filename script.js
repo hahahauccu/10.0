@@ -11,6 +11,7 @@ const totalPoses = 7;
 let standardKeypointsList = [];
 let poseOrder = [];
 let isPlaying = false;
+let cameraReady = false;
 
 // 隨機打亂順序
 function shufflePoseOrder() {
@@ -90,7 +91,7 @@ function compareKeypointsAngleBased(user, standard) {
 
   if (!count) return 0;
   const avgDiff = totalDiff / count;
-  return avgDiff < 8 ? 1 : 0;
+  return avgDiff < 8 ? 1 : 0; // 門檻越小越嚴格
 }
 
 // 畫紅點或藍點
@@ -137,7 +138,7 @@ async function detect() {
   rafId = requestAnimationFrame(detect);
 }
 
-// 啟動遊戲主流程
+// 啟動遊戲流程
 async function startGame() {
   cancelAnimationFrame(rafId);
   poseImage.src = "";
@@ -147,6 +148,44 @@ async function startGame() {
   restartBtn.style.display = 'none';
   isPlaying = true;
 
+  if (!cameraReady) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'user' }, // ✅ 改為使用自拍鏡頭
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.setTransform(-1, 0, 0, 1, canvas.width, 0); // 鏡像畫面
+      cameraReady = true;
+    } catch (err) {
+      alert("⚠️ 無法開啟攝影機：" + err.message);
+      return;
+    }
+
+    try {
+      await tf.setBackend('webgl');
+      await tf.ready();
+    } catch {
+      await tf.setBackend('wasm');
+      await tf.ready();
+    }
+
+    detector = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+    );
+  }
+
+  shufflePoseOrder();
+  await loadStandardKeypoints();
+
   poseImage.src = standardKeypointsList[0].imagePath;
   detect();
 }
@@ -154,7 +193,7 @@ async function startGame() {
 startBtn.addEventListener("click", startGame);
 restartBtn.addEventListener("click", startGame);
 
-// 點畫面也能跳下一關
+// 點一下畫面也能跳下一關
 document.body.addEventListener('click', () => {
   if (!standardKeypointsList.length || !isPlaying) return;
   currentPoseIndex++;
