@@ -10,6 +10,7 @@ let currentPoseIndex = 0;
 const totalPoses = 7;
 let standardKeypointsList = [];
 let poseOrder = [];
+let isPlaying = false;
 
 // 隨機打亂順序
 function shufflePoseOrder() {
@@ -89,7 +90,7 @@ function compareKeypointsAngleBased(user, standard) {
 
   if (!count) return 0;
   const avgDiff = totalDiff / count;
-  return avgDiff < 8 ? 1 : 0; // 判定通過門檻（越小越嚴格）
+  return avgDiff < 8 ? 1 : 0;
 }
 
 // 畫紅點或藍點
@@ -128,6 +129,7 @@ async function detect() {
         cancelAnimationFrame(rafId);
         poseImage.src = "";
         restartBtn.style.display = "block";
+        isPlaying = false;
       }
     }
   }
@@ -135,7 +137,7 @@ async function detect() {
   rafId = requestAnimationFrame(detect);
 }
 
-// 啟動遊戲主流程（修復重啟問題）
+// 啟動遊戲主流程
 async function startGame() {
   cancelAnimationFrame(rafId);
   poseImage.src = "";
@@ -143,6 +145,7 @@ async function startGame() {
   currentPoseIndex = 0;
   startBtn.style.display = 'none';
   restartBtn.style.display = 'none';
+  isPlaying = true;
 
   if (video.srcObject) {
     video.srcObject.getTracks().forEach(track => track.stop());
@@ -152,8 +155,8 @@ async function startGame() {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { exact: 'environment' },
-        width: { ideal: 640 },
-        height: { ideal: 480 }
+        width: { ideal: 960, min: 640, max: 1280 },
+        height: { ideal: 720, min: 480, max: 960 }
       },
       audio: false
     });
@@ -191,9 +194,8 @@ async function startGame() {
 startBtn.addEventListener("click", startGame);
 restartBtn.addEventListener("click", startGame);
 
-// 點畫面也能跳下一關
 document.body.addEventListener('click', () => {
-  if (!standardKeypointsList.length) return;
+  if (!standardKeypointsList.length || !isPlaying) return;
   currentPoseIndex++;
   if (currentPoseIndex < totalPoses) {
     poseImage.src = standardKeypointsList[currentPoseIndex].imagePath;
@@ -201,5 +203,13 @@ document.body.addEventListener('click', () => {
     cancelAnimationFrame(rafId);
     poseImage.src = "";
     restartBtn.style.display = "block";
+    isPlaying = false;
+  }
+});
+
+// ✅ 如果從背景回來，重新啟動遊戲流程
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && isPlaying) {
+    startGame();
   }
 });
