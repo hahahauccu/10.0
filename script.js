@@ -91,10 +91,10 @@ function compareKeypointsAngleBased(user, standard) {
 
   if (!count) return 0;
   const avgDiff = totalDiff / count;
-  return avgDiff < 8 ? 1 : 0; // 門檻越小越嚴格
+  return avgDiff < 8 ? 1 : 0; // 判定門檻
 }
 
-// 畫紅點或藍點
+// 畫骨架
 function drawKeypoints(kps, color, radius, alpha) {
   ctx.globalAlpha = alpha;
   ctx.fillStyle = color;
@@ -152,7 +152,7 @@ async function startGame() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { exact: 'environment' }, // ✅ 改為使用自拍鏡頭
+          facingMode: { exact: 'environment' }, // ✅ 固定主鏡頭
           width: { ideal: 640 },
           height: { ideal: 480 }
         },
@@ -162,7 +162,7 @@ async function startGame() {
       await video.play();
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      ctx.setTransform(-1, 0, 0, 1, canvas.width, 0); // 鏡像畫面
+      ctx.setTransform(-1, 0, 0, 1, canvas.width, 0); // 鏡像處理
       cameraReady = true;
     } catch (err) {
       alert("⚠️ 無法開啟攝影機：" + err.message);
@@ -193,7 +193,7 @@ async function startGame() {
 startBtn.addEventListener("click", startGame);
 restartBtn.addEventListener("click", startGame);
 
-// 點一下畫面也能跳下一關
+// 點畫面也能跳下一關
 document.body.addEventListener('click', () => {
   if (!standardKeypointsList.length || !isPlaying) return;
   currentPoseIndex++;
