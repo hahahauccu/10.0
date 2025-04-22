@@ -12,8 +12,9 @@ let standardKeypointsList = [];
 let poseOrder = [];
 let isPlaying = false;
 let cameraReady = false;
+let holdFrames = 0;
+const requiredHoldFrames = 10; // 必須連續 10 幀通過才算成功
 
-// 隨機打亂順序
 function shufflePoseOrder() {
   poseOrder = Array.from({ length: totalPoses }, (_, i) => i + 1);
   for (let i = poseOrder.length - 1; i > 0; i--) {
@@ -22,7 +23,6 @@ function shufflePoseOrder() {
   }
 }
 
-// 支援 PNG or png
 function resolvePoseImageName(base) {
   const png = `poses/${base}.png`;
   const PNG = `poses/${base}.PNG`;
@@ -34,7 +34,6 @@ function resolvePoseImageName(base) {
   });
 }
 
-// 載入 JSON 與對應圖
 async function loadStandardKeypoints() {
   standardKeypointsList = [];
   for (const i of poseOrder) {
@@ -49,7 +48,6 @@ async function loadStandardKeypoints() {
   }
 }
 
-// 計算夾角
 function computeAngle(a, b, c) {
   const ab = { x: b.x - a.x, y: b.y - a.y };
   const cb = { x: b.x - c.x, y: b.y - c.y };
@@ -60,7 +58,6 @@ function computeAngle(a, b, c) {
   return angleRad * (180 / Math.PI);
 }
 
-// 使用角度比對
 function compareKeypointsAngleBased(user, standard) {
   const angles = [
     ["left_shoulder", "left_elbow", "left_wrist"],
@@ -91,10 +88,9 @@ function compareKeypointsAngleBased(user, standard) {
 
   if (!count) return 0;
   const avgDiff = totalDiff / count;
-  return avgDiff < 1 ? 1 : 0; // 判定門檻
+  return avgDiff < 1 ? 1 : 0;
 }
 
-// 畫骨架
 function drawKeypoints(kps, color, radius, alpha) {
   ctx.globalAlpha = alpha;
   ctx.fillStyle = color;
@@ -108,7 +104,6 @@ function drawKeypoints(kps, color, radius, alpha) {
   ctx.globalAlpha = 1.0;
 }
 
-// 偵測流程
 async function detect() {
   const result = await detector.estimatePoses(video);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -123,27 +118,33 @@ async function detect() {
 
     const sim = compareKeypointsAngleBased(user, currentPose.keypoints);
     if (sim === 1) {
-      currentPoseIndex++;
-      if (currentPoseIndex < totalPoses) {
-        poseImage.src = standardKeypointsList[currentPoseIndex].imagePath;
-      } else {
-        cancelAnimationFrame(rafId);
-        poseImage.src = "";
-        restartBtn.style.display = "block";
-        isPlaying = false;
+      holdFrames++;
+      if (holdFrames >= requiredHoldFrames) {
+        currentPoseIndex++;
+        holdFrames = 0;
+        if (currentPoseIndex < totalPoses) {
+          poseImage.src = standardKeypointsList[currentPoseIndex].imagePath;
+        } else {
+          cancelAnimationFrame(rafId);
+          poseImage.src = "";
+          restartBtn.style.display = "block";
+          isPlaying = false;
+        }
       }
+    } else {
+      holdFrames = 0;
     }
   }
 
   rafId = requestAnimationFrame(detect);
 }
 
-// 啟動遊戲流程
 async function startGame() {
   cancelAnimationFrame(rafId);
   poseImage.src = "";
   standardKeypointsList = [];
   currentPoseIndex = 0;
+  holdFrames = 0;
   startBtn.style.display = 'none';
   restartBtn.style.display = 'none';
   isPlaying = true;
@@ -152,7 +153,7 @@ async function startGame() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { exact: 'environment' }, // ✅ 固定主鏡頭
+          facingMode: { exact: 'environment' },
           width: { ideal: 640 },
           height: { ideal: 480 }
         },
@@ -162,7 +163,7 @@ async function startGame() {
       await video.play();
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      ctx.setTransform(-1, 0, 0, 1, canvas.width, 0); // 鏡像處理
+      ctx.setTransform(-1, 0, 0, 1, canvas.width, 0);
       cameraReady = true;
     } catch (err) {
       alert("⚠️ 無法開啟攝影機：" + err.message);
@@ -193,10 +194,10 @@ async function startGame() {
 startBtn.addEventListener("click", startGame);
 restartBtn.addEventListener("click", startGame);
 
-// 點畫面也能跳下一關
 document.body.addEventListener('click', () => {
   if (!standardKeypointsList.length || !isPlaying) return;
   currentPoseIndex++;
+  holdFrames = 0;
   if (currentPoseIndex < totalPoses) {
     poseImage.src = standardKeypointsList[currentPoseIndex].imagePath;
   } else {
