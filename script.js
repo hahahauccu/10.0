@@ -88,7 +88,7 @@ function compareKeypointsAngleBased(user, standard) {
 
   if (!count) return 0;
   const avgDiff = totalDiff / count;
-  return avgDiff < 5 ? 1 : 0;
+  return avgDiff < 10 ? 1 : 0;
 }
 
 function drawKeypoints(kps, color, radius, alpha) {
