@@ -13,7 +13,7 @@ let poseOrder = [];
 let isPlaying = false;
 let cameraReady = false;
 let holdFrames = 0;
-const requiredHoldFrames = 10; // 必須連續 10 幀通過才算成功
+const requiredHoldFrames = 50; // 必須連續 10 幀通過才算成功
 
 function shufflePoseOrder() {
   poseOrder = Array.from({ length: totalPoses }, (_, i) => i + 1);
