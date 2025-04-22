@@ -91,7 +91,7 @@ function compareKeypointsAngleBased(user, standard) {
 
   if (!count) return 0;
   const avgDiff = totalDiff / count;
-  return avgDiff < 8 ? 1 : 0; // 判定門檻
+  return avgDiff < 5 ? 1 : 0; // 判定門檻
 }
 
 // 畫骨架
